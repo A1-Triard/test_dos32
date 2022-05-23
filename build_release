@@ -37,6 +37,5 @@ wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
     || exit 1
 cp -f HXRT216/BIN/DPMILD32.EXE \
     HXRT216/BIN/HDPMI32.EXE \
-    HXRT216/BIN/DKRNL32.DLL \
     target/i686-pc-dos-hxrt/release \
     || exit 1
