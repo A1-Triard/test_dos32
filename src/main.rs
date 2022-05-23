@@ -1,3 +1,5 @@
+#![feature(core_ffi_c)]
+
 #![deny(warnings)]
 
 #![windows_subsystem="console"]
@@ -6,6 +8,7 @@
 #![no_main]
 
 use core::arch::asm;
+use core::ffi::c_int;
 use core::panic::PanicInfo;
 
 fn exit(return_code: u8) -> ! {
@@ -27,6 +30,6 @@ pub extern fn panic(_info: &PanicInfo) -> ! {
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern "C" fn mainCRTStartup() -> ! {
-    exit(0)
+pub extern "C" fn mainCRTStartup() -> c_int {
+    0
 }
