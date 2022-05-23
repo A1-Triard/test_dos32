@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+cd "$(dirname "$(realpath "$0")")"
+
 if ! [ -e HXRT216.zip ]; then
     wget https://www.japheth.de/Download/HX/HXRT216.zip || exit 1
 fi
@@ -16,3 +18,15 @@ cargo +nightly build \
     -Z build-std-features=panic_immediate_abort \
     --target "i686-pc-windows-gnu" \
     --release || exit 1
+
+mkdir -p target/i686-pc-dos-hxrt/release || exit 1
+cp -f target/i686-pc-windows-gnu/release/test_dos32.exe \
+    target/i686-pc-dos-hxrt/release/test_dos32.exe \
+    || exit 1
+wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
+    target/i686-pc-dos-hxrt/release/test_dos32.exe \
+    HXRT216/BIN/DPMIST32.BIN \
+    || exit 1
+cp -f HXRT216/BIN/DPMILD32.EXE \
+    target/i686-pc-dos-hxrt/release \
+    || exit 1
