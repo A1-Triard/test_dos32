@@ -1,10 +1,9 @@
-#![feature(start)]
-
 #![deny(warnings)]
 
 #![windows_subsystem="console"]
 
 #![no_std]
+#![no_main]
 
 use core::arch::asm;
 use core::panic::PanicInfo;
@@ -26,13 +25,16 @@ pub extern fn panic(_info: &PanicInfo) -> ! {
     exit(99)
 }
 
+/*
 #[no_mangle]
 pub extern "C" fn rust_eh_register_frames() { }
 
 #[no_mangle]
 pub extern "C" fn rust_eh_unregister_frames() { }
+*/
 
-#[start]
-pub fn main(_argc: isize, _argv: *const *const u8) -> isize {
-    0
+#[allow(non_snake_case)]
+#[no_mangle]
+pub extern "C" fn mainCRTStartup() -> ! {
+    exit(0)
 }

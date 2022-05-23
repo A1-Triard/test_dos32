@@ -3,6 +3,8 @@ set -eu
 
 cd "$(dirname "$(realpath "$0")")"
 
+target=i686-pc-windows-msvc
+
 name="$(cargo metadata --format-version=1 | \
     python -c \
     "import sys, json; print(json.load(sys.stdin)['packages'][0]['name'])"\
@@ -21,11 +23,12 @@ cargo +nightly build \
     --verbose \
     -Z build-std=core,alloc,panic_abort \
     -Z build-std-features=panic_immediate_abort \
-    --target "i686-pc-windows-gnu" \
-    --release || exit 1
+    --target "$target" \
+    --release \
+    || exit 1
 
 mkdir -p target/i686-pc-dos-hxrt/release || exit 1
-cp -f target/i686-pc-windows-gnu/release/"$name".exe \
+cp -f target/$target/release/"$name".exe \
     target/i686-pc-dos-hxrt/release/"$name".exe \
     || exit 1
 wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
@@ -33,5 +36,7 @@ wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
     HXRT216/BIN/DPMIST32.BIN \
     || exit 1
 cp -f HXRT216/BIN/DPMILD32.EXE \
+    HXRT216/BIN/HDPMI32.EXE \
+    HXRT216/BIN/DKRNL32.DLL \
     target/i686-pc-dos-hxrt/release \
     || exit 1
