@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+if ! [ -e HXRT216.zip ]; then
+    wget https://www.japheth.de/Download/HX/HXRT216.zip || exit 1
+fi
+
+if ! [ -d HXRT216 ]; then
+    mkdir HXRT216 || exit 1
+    unzip -d HXRT216 HXRT216.zip || exit 1
+fi
+
+cargo +nightly build \
+    -Z build-std=core,alloc,panic_abort \
+    -Z build-std-features=panic_immediate_abort \
+    --target "i686-pc-windows-gnu" \
+    --release || exit 1
