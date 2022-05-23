@@ -11,6 +11,7 @@ if ! [ -d HXRT216 ]; then
 fi
 
 cargo +nightly build \
+    --verbose \
     -Z build-std=core,alloc,panic_abort \
     -Z build-std-features=panic_immediate_abort \
     --target "i686-pc-windows-gnu" \
