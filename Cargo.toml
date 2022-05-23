@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "test_dos32"
+name = "tstdos32"
 version = "0.0.0"
 publish = false
 
