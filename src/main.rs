@@ -25,14 +25,6 @@ pub extern fn panic(_info: &PanicInfo) -> ! {
     exit(99)
 }
 
-/*
-#[no_mangle]
-pub extern "C" fn rust_eh_register_frames() { }
-
-#[no_mangle]
-pub extern "C" fn rust_eh_unregister_frames() { }
-*/
-
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn mainCRTStartup() -> ! {
