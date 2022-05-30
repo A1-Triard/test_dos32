@@ -4,10 +4,11 @@ set -eu
 cd "$(dirname "$(realpath "$0")")"
 
 target=i686-pc-windows-msvc
+dos_target=i686-pc-dpmi-hxrt
 
 name="$(cargo metadata --format-version=1 | \
     python -c \
-    "import sys, json; print(json.load(sys.stdin)['packages'][0]['name'])"\
+    "import sys, json; print(json.load(sys.stdin)['packages'][-1]['name'])"\
     )"
 
 if ! [ -e HXRT216.zip ]; then
@@ -27,15 +28,18 @@ cargo +nightly build \
     --release \
     || exit 1
 
-mkdir -p target/i686-pc-dpmi-hxrt/release || exit 1
-cp -f target/$target/release/"$name".exe \
-    target/i686-pc-dpmi-hxrt/release/"$name".exe \
+mkdir -p target/"$dos_target"/release || exit 1
+cp -rf target/"$target"/release/build/tstdos32-*/out/CODEPAGE \
+    target/"$dos_target"/release \
+    || exit 1
+cp -f target/"$target"/release/"$name".exe \
+    target/"$dos_target"/release/"$name".exe \
     || exit 1
 wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
-    target/i686-pc-dpmi-hxrt/release/"$name".exe \
+    target/"$dos_target"/release/"$name".exe \
     HXRT216/BIN/DPMIST32.BIN \
     || exit 1
 cp -f HXRT216/BIN/DPMILD32.EXE \
     HXRT216/BIN/HDPMI32.EXE \
-    target/i686-pc-dpmi-hxrt/release \
+    target/"$dos_target"/release \
     || exit 1

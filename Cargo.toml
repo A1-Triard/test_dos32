@@ -4,9 +4,6 @@ name = "tstdos32"
 version = "0.0.0"
 publish = false
 
-[dependencies]
-dos-cp = "0.0.1"
-
 [profile.dev]
 panic = "abort"
 
@@ -16,3 +13,10 @@ lto = true
 opt-level = "z"
 panic = "abort"
 strip = true
+
+[dependencies]
+dos-cp = "0.0.1"
+
+[build-dependencies]
+dos-cp = "0.0.1"
+dos-cp-generator = "0.0.1"
