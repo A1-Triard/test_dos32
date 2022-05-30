@@ -21,21 +21,21 @@ fi
 
 cargo +nightly build \
     --verbose \
-    -Z build-std=core,alloc,panic_abort \
+    -Z build-std=core,panic_abort \
     -Z build-std-features=panic_immediate_abort \
     --target "$target" \
     --release \
     || exit 1
 
-mkdir -p target/i686-pc-dos-hxrt/release || exit 1
+mkdir -p target/i686-pc-dpmi-hxrt/release || exit 1
 cp -f target/$target/release/"$name".exe \
-    target/i686-pc-dos-hxrt/release/"$name".exe \
+    target/i686-pc-dpmi-hxrt/release/"$name".exe \
     || exit 1
 wine HXRT216/BIN/PESTUB.EXE -v -n -x -s \
-    target/i686-pc-dos-hxrt/release/"$name".exe \
+    target/i686-pc-dpmi-hxrt/release/"$name".exe \
     HXRT216/BIN/DPMIST32.BIN \
     || exit 1
 cp -f HXRT216/BIN/DPMILD32.EXE \
     HXRT216/BIN/HDPMI32.EXE \
-    target/i686-pc-dos-hxrt/release \
+    target/i686-pc-dpmi-hxrt/release \
     || exit 1

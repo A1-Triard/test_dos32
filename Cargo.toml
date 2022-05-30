@@ -4,6 +4,9 @@ name = "tstdos32"
 version = "0.0.0"
 publish = false
 
+[dependencies]
+dos-cp = "0.0.1"
+
 [profile.dev]
 panic = "abort"
 
