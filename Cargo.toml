@@ -15,10 +15,8 @@ panic = "abort"
 strip = true
 
 [dependencies]
-#compiler_builtins = { git = "https://github.com/rust-lang/compiler-builtins" }
 dos-cp = "0.0.1"
 null-terminated = "0.3.17"
-#rlibc = "1.0.0"
 
 [build-dependencies]
 dos-cp = "0.0.1"

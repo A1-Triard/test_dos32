@@ -7,10 +7,6 @@
 #![no_std]
 #![no_main]
 
-//mod builtins;
-//extern crate compiler_builtins;
-//extern crate rlibc;
-
 use core::arch::asm;
 use core::mem::size_of;
 use core::panic::PanicInfo;
