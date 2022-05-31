@@ -7,6 +7,7 @@
 #![no_std]
 #![no_main]
 
+use arrayvec::ArrayVec;
 use core::arch::asm;
 use core::mem::size_of;
 use core::panic::PanicInfo;
@@ -30,9 +31,9 @@ pub extern fn panic(_info: &PanicInfo) -> ! {
 }
 
 fn dos_version() -> (u8, u8) {
+    let mut major;
+    let mut minor;
     unsafe {
-        let mut major;
-        let mut minor;
         asm!(
             "int 0x21",
             in("ah") 0x30u8,
@@ -41,8 +42,8 @@ fn dos_version() -> (u8, u8) {
             lateout("cx") _,
             lateout("bx") _,
         );
-        (major, minor)
     }
+    (major, minor)
 }
 
 unsafe fn current_code_page() -> Result<u16, u16> {
@@ -64,6 +65,41 @@ unsafe fn current_code_page() -> Result<u16, u16> {
     if ok { Ok(res) } else { Err(err) }
 }
 
+fn get_psp_address() -> u16 {
+    let mut res: u16;
+    unsafe {
+        asm!(
+            "int 0x21",
+            in("ah") 0x62u8,
+            lateout("bx") res,
+        );
+    }
+    res
+}
+
+fn get_segment_base_address(selector: u16) -> Result<u32, u16> {
+    let mut cf: u8;
+    let mut err: u16;
+    let mut hw: u16;
+    let mut lw: u16;
+    unsafe {
+        asm!(
+            "int 0x31",
+            "mov {err:x}, ax",
+            "lahf",
+            err = lateout(reg) err,
+            in("ax") 0x0006u16,
+            in("bx") selector,
+            lateout("ah") cf,
+            lateout("al") _,
+            lateout("cx") hw,
+            lateout("dx") lw,
+        );
+    }
+    let ok = (cf & 0x01) == 0;
+    if ok { Ok(((hw as u32) << 16) | (lw as u32)) } else { Err(err) }
+}
+
 #[inline]
 fn p32<T>(p: *const T) -> u32 {
     assert!(size_of::<*const T>() == size_of::<u32>());
@@ -82,9 +118,9 @@ unsafe fn print(s: &[u8]) {
 
 /*
 fn open(filename: &Nul<u8>, mode: u8) -> Result<u16, u16> {
+    let mut handle: u16;
+    let mut cf: u8;
     unsafe {
-        let mut handle: u16;
-        let mut cf: u8;
         asm!(
             "int 0x21",
             "mov {handle:x}, ax",
@@ -96,11 +132,24 @@ fn open(filename: &Nul<u8>, mode: u8) -> Result<u16, u16> {
             lateout("ah") cf,
             lateout("al") _,
         );
-        let ok = (cf & 0x01) == 0;
-        if ok { Ok(handle) } else { Err(handle) }
     }
+    let ok = (cf & 0x01) == 0;
+    if ok { Ok(handle) } else { Err(handle) }
 }
 */
+
+struct CmdReader(*const u8);
+
+impl Iterator for CmdReader {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        let b = unsafe { *self.0 };
+        if b == 0x0D { return None; }
+        self.0 = unsafe { self.0.offset(1) };
+        Some(b)
+    }
+}
 
 #[allow(non_snake_case)]
 #[no_mangle]
@@ -112,6 +161,13 @@ pub extern "C" fn mainCRTStartup() -> ! {
     }
     let _code_page = (unsafe { current_code_page() })
         .unwrap_or_else(|_| { unsafe { print(b"Cannot determine code page.$") }; exit(1) });
-    
+    let psp = get_psp_address();
+    let psp = get_segment_base_address(psp)
+        .unwrap_or_else(|_| { unsafe { print(b"Cannot get PSP address.$"); exit(1); } });
+    let cmd = CmdReader((psp + 0x81) as *const u8);
+    let mut cmd = cmd.collect::<ArrayVec<_, 128>>();
+    cmd.push(b'$');
+    unsafe { print(&cmd[..]); }
+    unsafe { print(b"OK$"); }
     exit(0)
 }

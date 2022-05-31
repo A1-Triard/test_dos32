@@ -15,6 +15,7 @@ panic = "abort"
 strip = true
 
 [dependencies]
+arrayvec = { version = "0.7.2", default-features = false }
 dos-cp = "0.0.1"
 null-terminated = "0.3.17"
 
