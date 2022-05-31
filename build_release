@@ -6,10 +6,7 @@ cd "$(dirname "$(realpath "$0")")"
 target=i686-pc-windows-msvc
 dos_target=i686-pc-dpmi-hxrt
 
-name="$(cargo metadata --format-version=1 | \
-    python -c \
-    "import sys, json; print(json.load(sys.stdin)['packages'][-1]['name'])"\
-    )"
+name=tstdos32
 
 if ! [ -e HXRT216.zip ]; then
     wget https://www.japheth.de/Download/HX/HXRT216.zip || exit 1
