@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_mut)]
+#![allow(unused_parens)]
 #![allow(unused_variables)]
 
 #![windows_subsystem="console"]
@@ -179,13 +180,13 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
     code_page_path[9].write(b'0' + (code_page / 100) as u8);
     code_page_path[10].write(b'0' + ((code_page % 100) / 10) as u8);
     code_page_path[11].write(b'0' + (code_page % 10) as u8);
-    code_page_path[12].write(0);
+    code_page_path[12].write(b'$');
+    let mut code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
     unsafe { print(b"Opening$"); }
-    /*
-    let code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
+    unsafe { print(&code_page_path[..]); }
+    code_page_path[12] = b'0';
     let _code_page = (unsafe { open(code_page_path.as_ptr(), 0x00) })
         .unwrap_or_else(|_| { unsafe { print(b"Cannot open code page file.$") }; exit(1) });
     unsafe { print(b"OK$"); }
-    */
     exit(0)
 }
