@@ -1,17 +1,44 @@
-#![feature(naked_functions)]
+#![feature(lang_items)]
 
 #![deny(warnings)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_mut)]
+#![allow(unused_variables)]
 
 #![windows_subsystem="console"]
 
 #![no_std]
 #![no_main]
 
-use arrayvec::ArrayVec;
+extern crate rlibc;
+
+#[no_mangle]
+pub extern "C" fn _aulldiv() -> ! { exit(10) }
+#[no_mangle]
+pub extern "C" fn _aullrem() -> ! { exit(11) }
+#[no_mangle]
+pub extern "C" fn strlen() -> ! { exit(12) }
+#[no_mangle]
+pub extern "C" fn _fltused() -> ! { exit(13) }
+//#[no_mangle]
+//pub extern fn _ZN4core10intrinsics17const_eval_select17hf03a2474bc3721cfE() { }
+
+/*
+#[lang="eh_personality"]
+extern "C" fn eh_personality() {}
+
+#[no_mangle]
+pub extern "C" fn rust_eh_register_frames() {}
+
+#[no_mangle]
+pub extern "C" fn rust_eh_unregister_frames() {}
+*/
+
+//use arrayvec::ArrayVec;
 use core::arch::asm;
-use core::mem::size_of;
+use core::mem::{MaybeUninit, size_of, transmute};
 use core::panic::PanicInfo;
-//use null_terminated::Nul;
 
 fn exit(return_code: u8) -> ! {
     unsafe {
@@ -65,6 +92,7 @@ unsafe fn current_code_page() -> Result<u16, u16> {
     if ok { Ok(res) } else { Err(err) }
 }
 
+/*
 fn get_psp_address() -> u16 {
     let mut res: u16;
     unsafe {
@@ -99,6 +127,7 @@ fn get_segment_base_address(selector: u16) -> Result<u32, u16> {
     let ok = (cf & 0x01) == 0;
     if ok { Ok(((hw as u32) << 16) | (lw as u32)) } else { Err(err) }
 }
+*/
 
 #[inline]
 fn p32<T>(p: *const T) -> u32 {
@@ -116,58 +145,47 @@ unsafe fn print(s: &[u8]) {
     );
 }
 
-/*
-fn open(filename: &Nul<u8>, mode: u8) -> Result<u16, u16> {
+unsafe fn open(filename: *const u8, mode: u8) -> Result<u16, u16> {
     let mut handle: u16;
     let mut cf: u8;
-    unsafe {
-        asm!(
-            "int 0x21",
-            "mov {handle:x}, ax",
-            "lahf",
-            handle = lateout(reg) handle,
-            in("ah") 0x3du8,
-            in("al") mode,
-            in("edx") p32(filename.as_ptr()),
-            lateout("ah") cf,
-            lateout("al") _,
-        );
-    }
+    asm!(
+        "int 0x21",
+        "mov {handle:x}, ax",
+        "lahf",
+        handle = lateout(reg) handle,
+        in("ah") 0x3du8,
+        in("al") mode,
+        in("edx") p32(filename),
+        lateout("ah") cf,
+        lateout("al") _,
+    );
     let ok = (cf & 0x01) == 0;
     if ok { Ok(handle) } else { Err(handle) }
-}
-*/
-
-struct CmdReader(*const u8);
-
-impl Iterator for CmdReader {
-    type Item = u8;
-
-    fn next(&mut self) -> Option<u8> {
-        let b = unsafe { *self.0 };
-        if b == 0x0D { return None; }
-        self.0 = unsafe { self.0.offset(1) };
-        Some(b)
-    }
 }
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern "C" fn mainCRTStartup() -> ! {
+pub extern "stdcall" fn mainCRTStartup() -> ! {
     let dos = dos_version();
     if dos.0 < 3 || dos.0 == 3 && dos.1 < 30 {
         unsafe { print(b"DOS < 3.3$"); }
         exit(33);
     }
-    let _code_page = (unsafe { current_code_page() })
+    let code_page = (unsafe { current_code_page() })
         .unwrap_or_else(|_| { unsafe { print(b"Cannot determine code page.$") }; exit(1) });
-    let psp = get_psp_address();
-    let psp = get_segment_base_address(psp)
-        .unwrap_or_else(|_| { unsafe { print(b"Cannot get PSP address.$"); exit(1); } });
-    let cmd = CmdReader((psp + 0x81) as *const u8);
-    let mut cmd = cmd.collect::<ArrayVec<_, 128>>();
-    cmd.push(b'$');
-    unsafe { print(&cmd[..]); }
+    unsafe { print(b"Path$"); }
+    let mut code_page_path: [MaybeUninit<u8>; 13] = unsafe { MaybeUninit::uninit().assume_init() };
+    (&mut code_page_path[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
+    code_page_path[9].write(b'0' + (code_page / 100) as u8);
+    code_page_path[10].write(b'0' + ((code_page % 100) / 10) as u8);
+    code_page_path[11].write(b'0' + (code_page % 10) as u8);
+    code_page_path[12].write(0);
+    unsafe { print(b"Opening$"); }
+    /*
+    let code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
+    let _code_page = (unsafe { open(code_page_path.as_ptr(), 0x00) })
+        .unwrap_or_else(|_| { unsafe { print(b"Cannot open code page file.$") }; exit(1) });
     unsafe { print(b"OK$"); }
+    */
     exit(0)
 }
