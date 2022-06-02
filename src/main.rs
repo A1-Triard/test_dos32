@@ -366,9 +366,6 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         unsafe { int_21h_ah_09h_out_str(b"Cannot allocate memory.\r\n$".as_ptr()); }
         exit(1);
     });
-    let a = unsafe { int_31h_ax_0006h_segment_addr(conventional_memory.dx_selector).unwrap().cx_dx_addr };
-    assert!(a == (conventional_memory.ax_segment as u32) << 4);
-
     assert!(size_of::<usize>() == size_of::<u32>());
     let conventional_memory = unsafe { slice::from_raw_parts_mut(
         ((conventional_memory.ax_segment as u32) << 4) as *mut u8,
