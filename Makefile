@@ -51,9 +51,7 @@ HXRT216/BIN/DPMIST32.BIN: HXRT216.zip
 	rm -rf HXRT216
 	mkdir HXRT216
 	unzip -d HXRT216 HXRT216.zip
-	find HXRT216 -print0 | \
-	    xargs -0 -I '{}' \
-	    touch '{}'
+	find HXRT216 -print0 | xargs -0 touch
 
 HXRT216.zip:
 	wget https://www.japheth.de/Download/HX/HXRT216.zip
