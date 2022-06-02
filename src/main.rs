@@ -3,6 +3,7 @@
 
 #![deny(warnings)]
 #![allow(dead_code)]
+#![allow(unreachable_code)]
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 #![allow(unused_parens)]
@@ -31,6 +32,7 @@ use core::fmt::{self, Write};
 use core::mem::{MaybeUninit, size_of, transmute};
 use core::panic::PanicInfo;
 use core::slice::{self};
+use dos_cp::CodePage;
 
 mod dos {
     use core::arch::asm;
@@ -110,6 +112,33 @@ mod dos {
     }
 
     #[inline]
+    pub unsafe fn int_21h_ah_09h_out_ch(dx_str_24h: *const u8) {
+        asm!(
+            "int 0x21",
+            in("ax") 0x0900u16,
+            in("edx") p32(dx_str_24h),
+            lateout("ax") _,
+        );
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AlLastCh {
+        pub al_last_ch: u8,
+    }
+
+    #[inline]
+    pub unsafe fn int_21h_ah_02h_out_ch(dl_ch: u8) -> AlLastCh {
+        let mut ax: u16;
+        asm!(
+            "int 0x21",
+            in("ax") 0x0200u16,
+            in("dx") dl_ch as u16,
+            lateout("ax") ax,
+        );
+        AlLastCh { al_last_ch: ax as u8 }
+    }
+
+    #[inline]
     pub unsafe fn int_21h_ah_09h_out_str(dx_str_24h: *const u8) {
         asm!(
             "int 0x21",
@@ -168,6 +197,33 @@ mod dos {
         );
         if ((flags >> 8) as u8) & CF == 0 {
             Ok(AxRead { ax_read: ax })
+        } else {
+            Err(AxErr { ax_err: ax })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AxWritten {
+        pub ax_written: u16,
+    }
+
+    #[inline]
+    pub unsafe fn int_21h_ah_40h_write(bx_handle: u16, dx_cx_buf: &[u8]) -> Result<AxWritten, AxErr> {
+        let mut flags: u16;
+        let mut ax: u16;
+        asm!(
+            "int 0x21",
+            "mov {ax:x}, ax",
+            "lahf",
+            ax = lateout(reg) ax,
+            in("ax") 0x4000u16,
+            in("bx") bx_handle,
+            in("ecx") u16::try_from(dx_cx_buf.len()).unwrap() as u32,
+            in("edx") p32(dx_cx_buf.as_ptr()),
+            lateout("ax") flags
+        );
+        if ((flags >> 8) as u8) & CF == 0 {
+            Ok(AxWritten { ax_written: ax })
         } else {
             Err(AxErr { ax_err: ax })
         }
@@ -294,17 +350,15 @@ struct DosLastChanceWriter;
 impl Write for DosLastChanceWriter {
     fn write_char(&mut self, c: char) -> fmt::Result {
         let c = c as u32;
-        let a = if c > 0x7F || c == '$' as u32 || c == '\r' as u32 {
+        let c = if c > 0x7F || c == '\r' as u32 {
             b'?'
         } else {
             c as u8
         };
-        if a == b'\n' {
-            unsafe { int_21h_ah_09h_out_str(b"\r\n$".as_ptr()); }
-        } else {
-            let buf = [a, b'$'];
-            unsafe { int_21h_ah_09h_out_str(buf.as_ptr()); }
+        if c == b'\n' {
+            unsafe { int_21h_ah_02h_out_ch(b'\r'); }
         }
+        unsafe { int_21h_ah_02h_out_ch(c); }
         Ok(())
     }
 
@@ -343,17 +397,16 @@ fn exit(exit_code: u8) -> ! {
 
 const CONVENTIONAL_MEMORY_REQUIRED: u16 = 6400;
 
-/*
 struct DosWriter(&'static CodePage);
 
 impl Write for DosWriter {
     fn write_char(&mut self, c: char) -> fmt::Result {
-        if a == b'\n' {
-            unsafe { int_21h_ah_09h_out_str(b"\r\n$".as_ptr()); }
-        } else {
-            let buf = [a, b'$'];
-            unsafe { int_21h_ah_09h_out_str(buf.as_ptr()); }
+        let c = self.0.from_char(c).ok_or(fmt::Error)?;
+        if c == b'\r' { return Err(fmt::Error); }
+        if c == b'\n' {
+            (unsafe { int_21h_ah_40h_write(1, b"\r") }).map_err(|_| fmt::Error)?;
         }
+        (unsafe { int_21h_ah_40h_write(1, slice::from_ref(&c)) }).map_err(|_| fmt::Error)?;
         Ok(())
     }
 
@@ -364,7 +417,6 @@ impl Write for DosWriter {
         Ok(())
     }
 }
-*/
 
 #[allow(non_snake_case)]
 #[no_mangle]
@@ -444,8 +496,10 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         exit(1);
     }
     let code_page: &CodePage = unsafe { &*(code_page_memory.as_ptr() as *const CodePage) };
-    unsafe { int_10h_ah_00h_video_mode(0x12); } // 80x30, 8x16, 16
-    unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
-    loop { }
-    //exit(0);
+    let mut w = DosWriter(code_page);
+    let _ = writeln!(w, "Hello, DOS World!");
+    //unsafe { int_10h_ah_00h_video_mode(0x12); } // 80x30, 8x16, 16
+    //unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
+    //loop { }
+    exit(0);
 }
