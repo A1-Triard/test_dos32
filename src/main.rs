@@ -113,9 +113,9 @@ mod dos {
     pub unsafe fn int_21h_ah_09h_out_str(dx_str_24h: *const u8) {
         asm!(
             "int 0x21",
-            inout("ax") 0x0900u16 => _,
+            in("ax") 0x0900u16,
             in("edx") p32(dx_str_24h),
-            //out("ax") _,
+            lateout("ax") _,
         );
     }
 
@@ -369,13 +369,11 @@ impl Write for DosWriter {
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "stdcall" fn mainCRTStartup() -> ! {
-    unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
     let dos_ver = int_21h_ah_30h_dos_ver();
     if dos_ver.al_major < 3 || dos_ver.al_major == 3 && dos_ver.ah_minor < 30 {
         unsafe { int_21h_ah_09h_out_str(b"Error: DOS >= 3.3 required.\r\n$".as_ptr()); }
         exit(33);
     }
-    unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
     let conventional_memory_size = match unsafe { int_31h_ax_0100h_rm_alloc(0xFFFF) }.err().unwrap() {
         AllocErr { ax_err: 8, bx_available_paragraphs } => bx_available_paragraphs,
         AllocErr { ax_err: 7, .. } => {
@@ -409,7 +407,6 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         unsafe { int_21h_ah_09h_out_str(b"Cannot determine code page.\r\n$".as_ptr()); }
         exit(1);
     }).bx_active;
-    unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
     let mut code_page: [MaybeUninit<u8>; 13] = unsafe { MaybeUninit::uninit().assume_init() };
     (&mut code_page[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
     code_page[9].write(b'0' + (code_page_n / 100) as u8);
@@ -421,7 +418,6 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         unsafe { int_21h_ah_09h_out_str(b"Cannot open code page file.\r\n$".as_ptr()); }
         exit(1);
     }).ax_handle;
-    unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
     let mut code_page_buf: &mut [MaybeUninit<u8>] = unsafe { transmute(&mut code_page_memory[..]) };
     loop {
         if code_page_buf.is_empty() {
@@ -448,9 +444,8 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         exit(1);
     }
     let code_page: &CodePage = unsafe { &*(code_page_memory.as_ptr() as *const CodePage) };
+    unsafe { int_10h_ah_00h_video_mode(0x12); } // 80x30, 8x16, 16
     unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
-    //unsafe { int_10h_ah_00h_video_mode(0x12); } // 80x30, 8x16, 16
-    //unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
-    //loop { }
-    exit(0);
+    loop { }
+    //exit(0);
 }

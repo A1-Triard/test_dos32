@@ -7,10 +7,10 @@ bin=tstdos32
 
 release debug: %: target/$(DOS_TARGET)/%/$(bin).exe target/$(DOS_TARGET)/%/CODEPAGE target/$(DOS_TARGET)/%/HDPMI32.EXE target/$(DOS_TARGET)/%/DPMILD32.EXE
 
-rund: dbg
+rund: debug
 	dosbox target/$(DOS_TARGET)/debug/$(bin).exe
 
-runr: rls
+runr: release
 	dosbox target/$(DOS_TARGET)/release/$(bin).exe
 
 target/$(DOS_TARGET)/%/CODEPAGE: target/$(WIN_TARGET)/%
