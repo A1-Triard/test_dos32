@@ -1,4 +1,5 @@
 #![feature(lang_items)]
+#![feature(panic_info_message)]
 
 #![deny(warnings)]
 #![allow(dead_code)]
@@ -22,8 +23,6 @@ pub extern "C" fn _aullrem() -> ! { exit(11) }
 pub extern "C" fn strlen() -> ! { exit(12) }
 #[no_mangle]
 pub extern "C" fn _fltused() -> ! { exit(13) }
-//#[no_mangle]
-//pub extern fn _ZN4core10intrinsics17const_eval_select17hf03a2474bc3721cfE() { }
 
 /*
 #[lang="eh_personality"]
@@ -38,150 +37,343 @@ pub extern "C" fn rust_eh_unregister_frames() {}
 
 //use arrayvec::ArrayVec;
 use core::arch::asm;
+use core::fmt::{self, Write};
 use core::mem::{MaybeUninit, size_of, transmute};
 use core::panic::PanicInfo;
+use core::slice::{self};
 
-fn exit(return_code: u8) -> ! {
-    unsafe {
+mod dos {
+    use core::arch::asm;
+    use core::mem::size_of;
+
+    #[allow(non_snake_case)]
+    #[inline]
+    pub unsafe fn int_21h_ah_4Ch_exit(al_exit_code: u8) {
         asm!(
             "mov ah, 0x4C",
             "int 0x21",
-            in("al") return_code,
+            in("al") al_exit_code,
             out("ah") _,
         );
     }
-    loop { }
-}
 
-#[panic_handler]
-pub extern fn panic(_info: &PanicInfo) -> ! {
-    exit(99)
-}
+    #[derive(Debug, Clone)]
+    pub struct DosVer {
+        pub ah_minor: u8,
+        pub al_major: u8,
+    }
 
-fn dos_version() -> (u8, u8) {
-    let mut major;
-    let mut minor;
-    unsafe {
+    #[inline]
+    pub fn int_21h_ah_30h_dos_ver() -> DosVer {
+        let mut al_major;
+        let mut ah_minor;
+        unsafe {
+            asm!(
+                "int 0x21",
+                in("ah") 0x30u8,
+                lateout("ah") ah_minor,
+                lateout("al") al_major,
+                lateout("cx") _,
+                lateout("bx") _,
+            );
+        }
+        DosVer { ah_minor, al_major }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct CodePage {
+        pub bx_active: u16,
+        pub dx_default: u16,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AxErr {
+        pub ax_err: u16,
+    }
+
+    const CF: u8 = 0x01;
+
+    #[inline]
+    pub unsafe fn int_21h_ax_6601h_code_page() -> Result<CodePage, AxErr> {
+        let mut bx_active: u16;
+        let mut dx_default: u16;
+        let mut flags: u8;
+        let mut ax_err: u16;
         asm!(
             "int 0x21",
-            in("ah") 0x30u8,
-            lateout("ah") minor,
-            lateout("al") major,
-            lateout("cx") _,
-            lateout("bx") _,
+            "mov {ax_err:x}, ax",
+            "lahf",
+            ax_err = lateout(reg) ax_err,
+            in("ax") 0x6601u16,
+            lateout("ah") flags,
+            lateout("al") _,
+            lateout("bx") bx_active,
+            lateout("dx") dx_default,
+        );
+        if flags & CF == 0 {
+            Ok(CodePage { bx_active, dx_default })
+        } else {
+            Err(AxErr { ax_err })
+        }
+    }
+
+    #[inline]
+    fn p32<T>(p: *const T) -> u32 {
+        assert!(size_of::<*const T>() == size_of::<u32>());
+        let v = p as usize as u32;
+        v
+    }
+
+    #[inline]
+    pub unsafe fn int_21h_ah_09h_out_str(dx_str_24h: *const u8) {
+        asm!(
+            "int 0x21",
+            in("ah") 0x09u8,
+            in("edx") p32(dx_str_24h),
+            lateout("al") _,
         );
     }
-    (major, minor)
-}
 
-unsafe fn current_code_page() -> Result<u16, u16> {
-    let mut res: u16;
-    let mut cf: u8;
-    let mut err: u16;
-    asm!(
-        "int 0x21",
-        "mov {err:x}, ax",
-        "lahf",
-        err = lateout(reg) err,
-        in("ah") 0x66u8,
-        in("al") 0x01u8,
-        lateout("ah") cf,
-        lateout("bx") res,
-        lateout("dx") _,
-    );
-    let ok = (cf & 0x01) == 0;
-    if ok { Ok(res) } else { Err(err) }
-}
+    #[derive(Debug, Clone)]
+    pub struct AxHandle {
+        pub ax_handle: u16,
+    }
 
-/*
-fn get_psp_address() -> u16 {
-    let mut res: u16;
-    unsafe {
+    #[allow(non_snake_case)]
+    #[inline]
+    pub unsafe fn int_21h_ah_3D_open(dx_path_z: *const u8, al_mode: u8) -> Result<AxHandle, AxErr> {
+        let mut ax: u16;
+        let mut flags: u8;
+        asm!(
+            "int 0x21",
+            "mov {ax:x}, ax",
+            "lahf",
+            ax = out(reg) ax,
+            in("ah") 0x3du8,
+            in("al") al_mode,
+            in("edx") p32(dx_path_z),
+            lateout("ah") flags,
+            lateout("al") _,
+        );
+        if flags & CF == 0 {
+            Ok(AxHandle { ax_handle: ax })
+        } else {
+            Err(AxErr { ax_err: ax })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AxSegment {
+        pub ax_segment: u16,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AllocErr {
+        pub ax_err: u16,
+        pub bx_available_paragraphs: u16,
+    }
+
+    #[inline]
+    pub unsafe fn int_21h_ah_48h_alloc(bx_paragraphs: u16) -> Result<AxSegment, AllocErr> {
+        let mut ebx_paragraphs = bx_paragraphs as u32;
+        let mut ax: u16;
+        let mut flags: u8;
+        asm!(
+            "int 0x21",
+            "mov {ax:x}, ax",
+            "lahf",
+            ax = out(reg) ax,
+            in("ah") 0x48u8,
+            inlateout("ebx") ebx_paragraphs => ebx_paragraphs,
+            lateout("ah") flags,
+            lateout("al") _,
+        );
+        if flags & CF == 0 {
+            Ok(AxSegment { ax_segment: ax })
+        } else {
+            Err(AllocErr { ax_err: ax, bx_available_paragraphs: ebx_paragraphs as u16 })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct BxSegment {
+        pub bx_segment: u16,
+    }
+
+    pub unsafe fn int_21h_ah_62h_psp_addr() -> BxSegment {
+        let mut bx_segment: u16;
         asm!(
             "int 0x21",
             in("ah") 0x62u8,
-            lateout("bx") res,
+            lateout("bx") bx_segment,
         );
+        BxSegment { bx_segment }
     }
-    res
-}
 
-fn get_segment_base_address(selector: u16) -> Result<u32, u16> {
-    let mut cf: u8;
-    let mut err: u16;
-    let mut hw: u16;
-    let mut lw: u16;
-    unsafe {
+    #[derive(Debug, Clone)]
+    pub struct CxDxAddr {
+        pub cx_dx_addr: u32,
+    }
+
+    pub unsafe fn int_31h_ax_0006h_segment_addr(bx_selector: u16) -> Result<CxDxAddr, AxErr> {
+        let mut flags: u8;
+        let mut ax_err: u16;
+        let mut cx: u16;
+        let mut dx: u16;
         asm!(
             "int 0x31",
-            "mov {err:x}, ax",
+            "mov {ax_err:x}, ax",
             "lahf",
-            err = lateout(reg) err,
+            ax_err = lateout(reg) ax_err,
             in("ax") 0x0006u16,
-            in("bx") selector,
-            lateout("ah") cf,
+            in("bx") bx_selector,
+            lateout("ah") flags,
             lateout("al") _,
-            lateout("cx") hw,
-            lateout("dx") lw,
+            lateout("cx") cx,
+            lateout("dx") dx,
         );
+        if flags & CF == 0 {
+            Ok(CxDxAddr { cx_dx_addr: ((cx as u32) << 16) | (dx as u32) })
+        } else {
+            Err(AxErr { ax_err })
+        }
     }
-    let ok = (cf & 0x01) == 0;
-    if ok { Ok(((hw as u32) << 16) | (lw as u32)) } else { Err(err) }
-}
-*/
 
-#[inline]
-fn p32<T>(p: *const T) -> u32 {
-    assert!(size_of::<*const T>() == size_of::<u32>());
-    let v = p as usize as u32;
-    v
+    #[derive(Debug, Clone)]
+    pub struct RmAlloc {
+        pub ax_segment: u16,
+        pub dx_selector: u16,
+    }
+
+    pub unsafe fn int_31h_ax_0100h_rm_alloc(mut bx_paragraphs: u16) -> Result<RmAlloc, AllocErr> {
+        let mut flags: u8;
+        let mut ax: u16;
+        let mut dx_selector: u16;
+        asm!(
+            "int 0x31",
+            "mov {ax:x}, ax",
+            "lahf",
+            ax = lateout(reg) ax,
+            in("ax") 0x0100u16,
+            inlateout("bx") bx_paragraphs => bx_paragraphs,
+            lateout("ah") flags,
+            lateout("al") _,
+            lateout("dx") dx_selector,
+        );
+        if flags & CF == 0 {
+            Ok(RmAlloc { ax_segment: ax, dx_selector })
+        } else {
+            Err(AllocErr { ax_err: ax, bx_available_paragraphs: bx_paragraphs })
+        }
+    }
 }
 
-unsafe fn print(s: &[u8]) {
-    asm!(
-        "int 0x21",
-        in("ah") 0x09u8,
-        in("edx") p32(s.as_ptr()),
-        lateout("al") _,
-    );
+use dos::*;
+
+struct DosLastChanceWriter;
+
+impl Write for DosLastChanceWriter {
+    fn write_char(&mut self, c: char) -> fmt::Result {
+        let c = c as u32;
+        let a = if c > 0x7F || c == '$' as u32 || c == '\r' as u32 {
+            b'?'
+        } else {
+            c as u8
+        };
+        if a == b'\n' {
+            unsafe { int_21h_ah_09h_out_str(b"\r\n$".as_ptr()); }
+        } else {
+            let buf = [a, b'$'];
+            unsafe { int_21h_ah_09h_out_str(buf.as_ptr()); }
+        }
+        Ok(())
+    }
+
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for c in s.chars() {
+            self.write_char(c)?;
+        }
+        Ok(())
+    }
 }
 
-unsafe fn open(filename: *const u8, mode: u8) -> Result<u16, u16> {
-    let mut handle: u16;
-    let mut cf: u8;
-    asm!(
-        "int 0x21",
-        "mov {handle:x}, ax",
-        "lahf",
-        handle = out(reg) handle,
-        in("ah") 0x3du8,
-        in("al") mode,
-        in("edx") p32(filename),
-        lateout("ah") cf,
-        lateout("al") _,
-    );
-    let ok = (cf & 0x01) == 0;
-    if ok { Ok(handle) } else { Err(handle) }
+#[panic_handler]
+pub extern fn panic(info: &PanicInfo) -> ! {
+    let _ = DosLastChanceWriter.write_str("panic");
+    if let Some(&message) = info.message() {
+        let _ = DosLastChanceWriter.write_str(": ");
+        let _ = DosLastChanceWriter.write_fmt(message);
+    } else if let Some(message) = info.payload().downcast_ref::<&str>() {
+        let _ = DosLastChanceWriter.write_str(": ");
+        let _ = DosLastChanceWriter.write_str(message);
+    } else {
+        let _ = DosLastChanceWriter.write_str("!");
+    }
+    if let Some(location) = info.location() {
+        let _ = writeln!(DosLastChanceWriter, " ({})", location);
+    } else {
+        let _ = writeln!(DosLastChanceWriter);
+    }
+    exit(99)
 }
+
+fn exit(exit_code: u8) -> ! {
+    unsafe { int_21h_ah_4Ch_exit(exit_code); }
+    loop { }
+}
+
+const CONVENTIONAL_MEMORY_REQUIRED: u16 = 6400;
 
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "stdcall" fn mainCRTStartup() -> ! {
-    let dos = dos_version();
-    if dos.0 < 3 || dos.0 == 3 && dos.1 < 30 {
-        unsafe { print(b"DOS < 3.3$"); }
+    let dos_ver = int_21h_ah_30h_dos_ver();
+    if dos_ver.al_major < 3 || dos_ver.al_major == 3 && dos_ver.ah_minor < 30 {
+        unsafe { int_21h_ah_09h_out_str(b"Error: DOS >= 3.3 required.\r\n$".as_ptr()); }
         exit(33);
     }
-    let code_page = (unsafe { current_code_page() })
-        .unwrap_or_else(|_| { unsafe { print(b"Cannot determine code page.$") }; exit(1) });
-    let mut code_page_path: [MaybeUninit<u8>; 13] = unsafe { MaybeUninit::uninit().assume_init() };
-    (&mut code_page_path[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
-    code_page_path[9].write(b'0' + (code_page / 100) as u8);
-    code_page_path[10].write(b'0' + ((code_page % 100) / 10) as u8);
-    code_page_path[11].write(b'0' + (code_page % 10) as u8);
-    code_page_path[12].write(0);
-    let mut code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
-    let _code_page = (unsafe { open(code_page_path.as_ptr(), 0x00) })
-        .unwrap_or_else(|_| { unsafe { print(b"Cannot open code page file.$") }; exit(1) });
-    exit(0)
+    let conventional_memory_size = match unsafe { int_31h_ax_0100h_rm_alloc(0xFFFF) }.err().unwrap() {
+        AllocErr { ax_err: 8, bx_available_paragraphs } => bx_available_paragraphs,
+        AllocErr { ax_err: 7, .. } => {
+            unsafe { int_21h_ah_09h_out_str(b"Error: memory control block destroyed.\r\n$".as_ptr()); }
+            exit(1)
+        },
+        AllocErr { ax_err: 0x8011, .. } => {
+            unsafe { int_21h_ah_09h_out_str(b"Error: descriptor unavailable.\r\n$".as_ptr()); }
+            exit(1)
+        },
+        _ => {
+            unsafe { int_21h_ah_09h_out_str(b"Error: unknown memory error.\r\n$".as_ptr()); }
+            exit(1)
+        },
+    };
+    if conventional_memory_size < CONVENTIONAL_MEMORY_REQUIRED {
+        unsafe { int_21h_ah_09h_out_str(b"Insuficient memory.\r\n$".as_ptr()); }
+        exit(1);
+    }
+    let conventional_memory = (unsafe { int_31h_ax_0100h_rm_alloc(conventional_memory_size) }).unwrap_or_else(|_| {
+        unsafe { int_21h_ah_09h_out_str(b"Cannot allocate memory.\r\n$".as_ptr()); }
+        exit(1);
+    });
+    assert!(size_of::<usize>() == size_of::<u32>());
+    let conventional_memory = unsafe { slice::from_raw_parts_mut(
+        ((conventional_memory.ax_segment as u32) << 4) as *mut u8,
+        ((conventional_memory_size as u32) << 4) as usize
+    ) };
+    let code_page_n = (unsafe { int_21h_ax_6601h_code_page() }).unwrap_or_else(|_| {
+        unsafe { int_21h_ah_09h_out_str(b"Cannot determine code page.\r\n$".as_ptr()); }
+        exit(1);
+    }).bx_active;
+    let mut code_page: [MaybeUninit<u8>; 13] = unsafe { MaybeUninit::uninit().assume_init() };
+    (&mut code_page[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
+    code_page[9].write(b'0' + (code_page_n / 100) as u8);
+    code_page[10].write(b'0' + ((code_page_n % 100) / 10) as u8);
+    code_page[11].write(b'0' + (code_page_n % 10) as u8);
+    code_page[12].write(0);
+    let code_page: [u8; 13] = unsafe { transmute(code_page) };
+    let _code_page = (unsafe { int_21h_ah_3D_open(code_page.as_ptr(), 0x00) }).unwrap_or_else(|_| {
+        unsafe { int_21h_ah_09h_out_str(b"Cannot open code page file.\r\n$".as_ptr()); }
+        exit(1);
+    });
+    exit(0);
 }

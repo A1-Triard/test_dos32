@@ -16,6 +16,6 @@ fn main() {
     for &code_page in KNOWN_CODE_PAGES {
         let file = out_dir.join(format!("{}", code_page));
         let mut file = File::create(file).unwrap();
-        file.write_all(&CodePage::generate(code_page).into_bytes()).unwrap();
+        file.write_all(&CodePage::generate(code_page).0).unwrap();
     }
 }
