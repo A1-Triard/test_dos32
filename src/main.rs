@@ -51,10 +51,8 @@ mod dos {
     #[inline]
     pub unsafe fn int_21h_ah_4Ch_exit(al_exit_code: u8) {
         asm!(
-            "mov ah, 0x4C",
             "int 0x21",
-            in("ax") al_exit_code as u16,
-            out("ax") _,
+            in("ax") 0x4C00u16 | al_exit_code as u16,
         );
     }
 
@@ -66,7 +64,7 @@ mod dos {
 
     #[inline]
     pub fn int_21h_ah_30h_dos_ver() -> DosVer {
-        let mut ax;
+        let mut ax: u16;
         unsafe {
             asm!(
                 "int 0x21",
@@ -126,7 +124,7 @@ mod dos {
     pub unsafe fn int_21h_ah_09h_out_str(dx_str_24h: *const u8) {
         asm!(
             "int 0x21",
-            in("ax") 0x0900u8,
+            in("ax") 0x0900u16,
             in("edx") p32(dx_str_24h),
             lateout("ax") _,
         );
@@ -173,7 +171,7 @@ mod dos {
             "mov {ax:x}, ax",
             "lahf",
             ax = lateout(reg) ax,
-            in("ax") 0x3F00u16
+            in("ax") 0x3F00u16,
             in("bx") bx_handle,
             in("ecx") u16::try_from(dx_cx_buf.len()).unwrap() as u32,
             in("edx") p32(dx_cx_buf.as_mut_ptr()),
@@ -228,7 +226,7 @@ mod dos {
         let mut bx_segment: u16;
         asm!(
             "int 0x21",
-            in("ax") 0x6200u8,
+            in("ax") 0x6200u16,
             lateout("bx") bx_segment,
         );
         BxSegment { bx_segment }
@@ -404,10 +402,8 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         exit(1);
     }).ax_handle;
     let mut code_page_buf: &mut [MaybeUninit<u8>] = unsafe { transmute(&mut code_page_memory[..]) };
-    unsafe { int_21h_ah_09h_out_str(b"OK\r\n$".as_ptr()); }
     loop {
         if code_page_buf.is_empty() {
-            unsafe { int_21h_ah_09h_out_str(b"empty\r\n$".as_ptr()); }
             let mut byte: MaybeUninit<u8> = MaybeUninit::uninit();
             let read = (unsafe { int_21h_ah_3Fh_read(code_page, slice::from_mut(&mut byte)) }).unwrap_or_else(|_| {
                 unsafe { int_21h_ah_09h_out_str(b"Cannot read code page file.\r\n$".as_ptr()); }
@@ -419,16 +415,13 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
             }
             break;
         }
-        unsafe { int_21h_ah_09h_out_str(b"go\r\n$".as_ptr()); }
         let read = (unsafe { int_21h_ah_3Fh_read(code_page, code_page_buf) }).unwrap_or_else(|_| {
             unsafe { int_21h_ah_09h_out_str(b"Cannot read code page file.\r\n$".as_ptr()); }
             exit(1);
         }).ax_read;
-        unsafe { int_21h_ah_09h_out_str(b"read\r\n$".as_ptr()); }
         if read == 0 { break; }
         code_page_buf = &mut code_page_buf[read as usize ..];
     }
-    unsafe { int_21h_ah_09h_out_str(b"OK\r\n$".as_ptr()); }
     if !code_page_buf.is_empty() {
         unsafe { int_21h_ah_09h_out_str(b"Invalid code page file: too small.\r\n$".as_ptr()); }
         exit(1);
