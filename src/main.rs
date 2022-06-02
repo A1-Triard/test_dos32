@@ -25,17 +25,6 @@ pub extern "C" fn strlen() -> ! { exit(12) }
 #[no_mangle]
 pub extern "C" fn _fltused() -> ! { exit(13) }
 
-/*
-#[lang="eh_personality"]
-extern "C" fn eh_personality() {}
-
-#[no_mangle]
-pub extern "C" fn rust_eh_register_frames() {}
-
-#[no_mangle]
-pub extern "C" fn rust_eh_unregister_frames() {}
-*/
-
 //use arrayvec::ArrayVec;
 use core::arch::asm;
 use core::fmt::{self, Write};

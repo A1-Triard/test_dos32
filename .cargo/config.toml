@@ -1,3 +1,9 @@
 [build]
 target = "i586-pc-windows-msvc"
-rustflags = "-C target-feature=+crt-static -C link-arg=/NODEFAULTLIB"
+rustflags = "-C target-feature=+crt-static"
+
+[target.i586-unknown-linux-gnu]
+rustflags = "-C link-arg=-nostdlib"
+
+[target.i586-pc-windows-msvc]
+rustflags = "-C link-arg=/NODEFAULTLIB"
