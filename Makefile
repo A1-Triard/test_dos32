@@ -3,7 +3,13 @@ DOS_TARGET=i586-pc-dmpi-hxrt
 
 bin=tstdos32
 
-.PHONY: debug release cargo.debug cargo.release
+.PHONY: debug release cargo.debug cargo.release rund runr
+
+rund: debug
+	dosbox target/$(DOS_TARGET)/debug/$(bin).exe
+
+runr: release
+	dosbox target/$(DOS_TARGET)/release/$(bin).exe
 
 release debug: %: target/$(DOS_TARGET)/%/$(bin).exe target/$(DOS_TARGET)/%/CODEPAGE target/$(DOS_TARGET)/%/HDPMI32.EXE target/$(DOS_TARGET)/%/DPMILD32.EXE
 
