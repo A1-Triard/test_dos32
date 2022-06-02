@@ -3,7 +3,13 @@ DOS_TARGET=i586-pc-dmpi-hxrt
 
 bin=tstdos32
 
-.PHONY: debug release cargo.debug cargo.release rund runr
+.PHONY: debug release rund runr
+
+release debug: %: \
+    target/$(DOS_TARGET)/%/$(bin).exe \
+    target/$(DOS_TARGET)/%/CODEPAGE \
+    target/$(DOS_TARGET)/%/HDPMI32.EXE \
+    target/$(DOS_TARGET)/%/DPMILD32.EXE
 
 rund: debug
 	dosbox target/$(DOS_TARGET)/debug/$(bin).exe
@@ -11,15 +17,14 @@ rund: debug
 runr: release
 	dosbox target/$(DOS_TARGET)/release/$(bin).exe
 
-release debug: %: target/$(DOS_TARGET)/%/$(bin).exe target/$(DOS_TARGET)/%/CODEPAGE target/$(DOS_TARGET)/%/HDPMI32.EXE target/$(DOS_TARGET)/%/DPMILD32.EXE
-
-target/$(DOS_TARGET)/%/CODEPAGE: cargo.%
+target/$(DOS_TARGET)/%/CODEPAGE: target/$(WIN_TARGET)/%
 	mkdir -p target/$(DOS_TARGET)/$*
 	find target/$(WIN_TARGET)/$*/build -name '$(bin)-*' -print0 | \
 	    xargs -0 -I '{}' \
 	    cp -rf '{}'/out/CODEPAGE target/$(DOS_TARGET)/$*
 
-target/$(DOS_TARGET)/%/$(bin).exe: cargo.% \
+target/$(DOS_TARGET)/%/$(bin).exe: \
+    target/$(WIN_TARGET)/% \
     HXRT216/BIN/PESTUB.EXE \
     HXRT216/BIN/DPMIST32.BIN
 	mkdir -p target/$(DOS_TARGET)/$*
@@ -42,8 +47,7 @@ target/$(DOS_TARGET)/%/DPMILD32.EXE: HXRT216/BIN/DPMILD32.EXE
 HXRT216/BIN/HDPMI32.EXE \
 HXRT216/BIN/DPMILD32.EXE \
 HXRT216/BIN/PESTUB.EXE \
-HXRT216/BIN/DPMIST32.BIN: \
-    HXRT216.zip
+HXRT216/BIN/DPMIST32.BIN: HXRT216.zip
 	rm -rf HXRT216
 	mkdir HXRT216
 	unzip -d HXRT216 HXRT216.zip
@@ -54,13 +58,13 @@ HXRT216/BIN/DPMIST32.BIN: \
 HXRT216.zip:
 	wget https://www.japheth.de/Download/HX/HXRT216.zip
 
-cargo.debug: Cargo.toml Cargo.lock src/main.rs build.rs
+target/$(WIN_TARGET)/debug: Cargo.toml Cargo.lock src/main.rs build.rs
 	cargo +nightly build \
 	    --verbose \
 	    -Z build-std=core,panic_abort \
 	    --target $(WIN_TARGET)
 
-cargo.release: Cargo.toml Cargo.lock src/main.rs build.rs
+target/$(WIN_TARGET)/release: Cargo.toml Cargo.lock src/main.rs build.rs
 	cargo +nightly build \
 	    --verbose \
 	    -Z build-std=core,panic_abort \
