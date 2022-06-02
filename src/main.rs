@@ -174,26 +174,13 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
     }
     let code_page = (unsafe { current_code_page() })
         .unwrap_or_else(|_| { unsafe { print(b"Cannot determine code page.$") }; exit(1) });
-    unsafe { print(b"Path$"); }
-    /*
-    let mut p: [MaybeUninit<u8>; 11] = unsafe { MaybeUninit::uninit().assume_init() };
-    (&mut p[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
-    p[9].write(b'1');
-    p[10].write(b'\0');
-    let p: [u8; 11] = unsafe { transmute(p) };
-    (unsafe { open(p.as_ptr(), 0x00) })
-        .unwrap_or_else(|e| { unsafe { print(b"Cannot open 1 file.$") }; exit(e as u8) });
-    */
     let mut code_page_path: [MaybeUninit<u8>; 13] = unsafe { MaybeUninit::uninit().assume_init() };
     (&mut code_page_path[.. 9]).copy_from_slice(unsafe { transmute(&b"CODEPAGE\\"[..]) });
     code_page_path[9].write(b'0' + (code_page / 100) as u8);
     code_page_path[10].write(b'0' + ((code_page % 100) / 10) as u8);
     code_page_path[11].write(b'0' + (code_page % 10) as u8);
-    code_page_path[12].write(b'$');
+    code_page_path[12].write(0);
     let mut code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
-    unsafe { print(b"Opening$"); }
-    unsafe { print(&code_page_path[..]); }
-    code_page_path[12] = 0;
     let _code_page = (unsafe { open(code_page_path.as_ptr(), 0x00) })
         .unwrap_or_else(|e| { unsafe { print(b"Cannot open code page file.$") }; exit(e as u8) });
     unsafe { print(b"OK$"); }
