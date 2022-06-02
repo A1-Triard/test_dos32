@@ -146,32 +146,23 @@ unsafe fn print(s: &[u8]) {
     );
 }
 
-unsafe fn print_x(s: *const u8) {
+unsafe fn open(filename: *const u8, mode: u8) -> Result<u16, u16> {
+    let mut handle: u16;
+    let mut cf: u8;
     asm!(
         "int 0x21",
-        in("ah") 0x09u8,
-        in("edx") p32(s),
+        "mov {handle:x}, ax",
+        "lahf",
+        handle = out(reg) handle,
+        in("ah") 0x3du8,
+        in("al") mode,
+        in("edx") p32(filename),
+        lateout("ah") cf,
         lateout("al") _,
     );
+    let ok = (cf & 0x01) == 0;
+    if ok { Ok(handle) } else { Err(handle) }
 }
-
-/*
-unsafe fn open(filename: *const u8, mode: u8) -> Result<u16, u16> {
-    //let mut handle: u16;
-    //let mut cf: u8;
-    asm!(
-        "int 0x21",
-        //"mov {handle:x}, ax",
-        //"lahf",
-        //handle = out(reg) handle,
-        in("ah") 0x3du8,
-        //inout("al") mode => _,
-        in("edx") p32(filename),
-    );
-    let ok = true; //(cf & 0x01) == 0;
-    if ok { Ok(0) } else { Err(0) }
-}
-*/
 
 #[allow(non_snake_case)]
 #[no_mangle]
@@ -188,14 +179,9 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
     code_page_path[9].write(b'0' + (code_page / 100) as u8);
     code_page_path[10].write(b'0' + ((code_page % 100) / 10) as u8);
     code_page_path[11].write(b'0' + (code_page % 10) as u8);
-    code_page_path[12].write(b'$');
-    //let mut code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
-    //let _ = (unsafe { open(code_page_path.as_ptr(), 0x00) });
-    //code_page_path[12] = b'$';
-    /*
+    code_page_path[12].write(0);
+    let mut code_page_path: [u8; 13] = unsafe { transmute(code_page_path) };
     let _code_page = (unsafe { open(code_page_path.as_ptr(), 0x00) })
-        .unwrap_or_else(|e| { unsafe { print(b"Cannot open code page file.$") }; exit(e as u8) });
-    */
-    //unsafe { print_x(code_page_path.as_ptr() as _); }
-    exit(code_page_path.as_ptr() as u8)
+        .unwrap_or_else(|_| { unsafe { print(b"Cannot open code page file.$") }; exit(1) });
+    exit(0)
 }

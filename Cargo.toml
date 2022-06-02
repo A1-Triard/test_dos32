@@ -8,11 +8,11 @@ publish = false
 panic = "abort"
 
 [profile.release]
-#codegen-units = 1
-#lto = true
-opt-level = 1
+codegen-units = 1
+lto = true
+opt-level = "z"
 panic = "abort"
-#strip = true
+strip = true
 
 [dependencies]
 #arrayvec = { version = "0.7.2", default-features = false }

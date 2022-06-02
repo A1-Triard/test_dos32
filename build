@@ -3,14 +3,14 @@ set -eu
 
 cd "$(dirname "$(realpath "$0")")"
 
-target=i686-pc-windows-msvc
-dos_target=i686-pc-dpmi-hxrt
+target=i586-pc-windows-msvc
+dos_target=i586-pc-dpmi-hxrt
 
 release=release
 #release=debug
 
-args=" --release"
-#args=" -Z build-std-features=panic_immediate_abort --release"
+#args=" --release"
+args=" -Z build-std-features=panic_immediate_abort --release"
 #args=""
 
 name=tstdos32
