@@ -6,6 +6,7 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
 #![allow(unused_parens)]
+#![allow(unused_unsafe)]
 #![allow(unused_variables)]
 
 #![windows_subsystem="console"]
@@ -44,7 +45,7 @@ use core::slice::{self};
 
 mod dos {
     use core::arch::asm;
-    use core::mem::size_of;
+    use core::mem::{MaybeUninit, size_of};
 
     #[allow(non_snake_case)]
     #[inline]
@@ -52,8 +53,8 @@ mod dos {
         asm!(
             "mov ah, 0x4C",
             "int 0x21",
-            in("al") al_exit_code,
-            out("ah") _,
+            in("ax") al_exit_code as u16,
+            out("ax") _,
         );
     }
 
@@ -65,19 +66,17 @@ mod dos {
 
     #[inline]
     pub fn int_21h_ah_30h_dos_ver() -> DosVer {
-        let mut al_major;
-        let mut ah_minor;
+        let mut ax;
         unsafe {
             asm!(
                 "int 0x21",
-                in("ah") 0x30u8,
-                lateout("ah") ah_minor,
-                lateout("al") al_major,
+                in("ax") 0x3000u16,
+                lateout("ax") ax,
                 lateout("cx") _,
                 lateout("bx") _,
             );
         }
-        DosVer { ah_minor, al_major }
+        DosVer { ah_minor: (ax >> 8) as u8, al_major: ax as u8 }
     }
 
     #[derive(Debug, Clone)]
@@ -97,7 +96,7 @@ mod dos {
     pub unsafe fn int_21h_ax_6601h_code_page() -> Result<CodePage, AxErr> {
         let mut bx_active: u16;
         let mut dx_default: u16;
-        let mut flags: u8;
+        let mut flags: u16;
         let mut ax_err: u16;
         asm!(
             "int 0x21",
@@ -105,12 +104,11 @@ mod dos {
             "lahf",
             ax_err = lateout(reg) ax_err,
             in("ax") 0x6601u16,
-            lateout("ah") flags,
-            lateout("al") _,
+            lateout("ax") flags,
             lateout("bx") bx_active,
             lateout("dx") dx_default,
         );
-        if flags & CF == 0 {
+        if ((flags >> 8) as u8) & CF == 0 {
             Ok(CodePage { bx_active, dx_default })
         } else {
             Err(AxErr { ax_err })
@@ -128,9 +126,9 @@ mod dos {
     pub unsafe fn int_21h_ah_09h_out_str(dx_str_24h: *const u8) {
         asm!(
             "int 0x21",
-            in("ah") 0x09u8,
+            in("ax") 0x0900u8,
             in("edx") p32(dx_str_24h),
-            lateout("al") _,
+            lateout("ax") _,
         );
     }
 
@@ -141,22 +139,48 @@ mod dos {
 
     #[allow(non_snake_case)]
     #[inline]
-    pub unsafe fn int_21h_ah_3D_open(dx_path_z: *const u8, al_mode: u8) -> Result<AxHandle, AxErr> {
+    pub unsafe fn int_21h_ah_3Dh_open(dx_path_z: *const u8, al_mode: u8) -> Result<AxHandle, AxErr> {
         let mut ax: u16;
-        let mut flags: u8;
+        let mut flags: u16;
         asm!(
             "int 0x21",
             "mov {ax:x}, ax",
             "lahf",
-            ax = out(reg) ax,
-            in("ah") 0x3du8,
-            in("al") al_mode,
+            ax = lateout(reg) ax,
+            in("ax") 0x3d00u16 | al_mode as u16,
             in("edx") p32(dx_path_z),
-            lateout("ah") flags,
-            lateout("al") _,
+            lateout("ax") flags,
         );
-        if flags & CF == 0 {
+        if ((flags >> 8) as u8) & CF == 0 {
             Ok(AxHandle { ax_handle: ax })
+        } else {
+            Err(AxErr { ax_err: ax })
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AxRead {
+        pub ax_read: u16,
+    }
+
+    #[allow(non_snake_case)]
+    #[inline]
+    pub unsafe fn int_21h_ah_3Fh_read(bx_handle: u16, dx_cx_buf: &mut [MaybeUninit<u8>]) -> Result<AxRead, AxErr> {
+        let mut flags: u16;
+        let mut ax: u16;
+        asm!(
+            "int 0x21",
+            "mov {ax:x}, ax",
+            "lahf",
+            ax = lateout(reg) ax,
+            in("ax") 0x3F00u16
+            in("bx") bx_handle,
+            in("ecx") u16::try_from(dx_cx_buf.len()).unwrap() as u32,
+            in("edx") p32(dx_cx_buf.as_mut_ptr()),
+            lateout("ax") flags
+        );
+        if ((flags >> 8) as u8) & CF == 0 {
+            Ok(AxRead { ax_read: ax })
         } else {
             Err(AxErr { ax_err: ax })
         }
@@ -177,18 +201,17 @@ mod dos {
     pub unsafe fn int_21h_ah_48h_alloc(bx_paragraphs: u16) -> Result<AxSegment, AllocErr> {
         let mut ebx_paragraphs = bx_paragraphs as u32;
         let mut ax: u16;
-        let mut flags: u8;
+        let mut flags: u16;
         asm!(
             "int 0x21",
             "mov {ax:x}, ax",
             "lahf",
-            ax = out(reg) ax,
-            in("ah") 0x48u8,
+            ax = lateout(reg) ax,
+            in("ax") 0x4800u16,
             inlateout("ebx") ebx_paragraphs => ebx_paragraphs,
-            lateout("ah") flags,
-            lateout("al") _,
+            lateout("ax") flags,
         );
-        if flags & CF == 0 {
+        if ((flags >> 8) as u8) & CF == 0 {
             Ok(AxSegment { ax_segment: ax })
         } else {
             Err(AllocErr { ax_err: ax, bx_available_paragraphs: ebx_paragraphs as u16 })
@@ -200,11 +223,12 @@ mod dos {
         pub bx_segment: u16,
     }
 
+    #[inline]
     pub unsafe fn int_21h_ah_62h_psp_addr() -> BxSegment {
         let mut bx_segment: u16;
         asm!(
             "int 0x21",
-            in("ah") 0x62u8,
+            in("ax") 0x6200u8,
             lateout("bx") bx_segment,
         );
         BxSegment { bx_segment }
@@ -215,8 +239,9 @@ mod dos {
         pub cx_dx_addr: u32,
     }
 
+    #[inline]
     pub unsafe fn int_31h_ax_0006h_segment_addr(bx_selector: u16) -> Result<CxDxAddr, AxErr> {
-        let mut flags: u8;
+        let mut flags: u16;
         let mut ax_err: u16;
         let mut cx: u16;
         let mut dx: u16;
@@ -227,12 +252,11 @@ mod dos {
             ax_err = lateout(reg) ax_err,
             in("ax") 0x0006u16,
             in("bx") bx_selector,
-            lateout("ah") flags,
-            lateout("al") _,
+            lateout("ax") flags,
             lateout("cx") cx,
             lateout("dx") dx,
         );
-        if flags & CF == 0 {
+        if ((flags >> 8) as u8) & CF == 0 {
             Ok(CxDxAddr { cx_dx_addr: ((cx as u32) << 16) | (dx as u32) })
         } else {
             Err(AxErr { ax_err })
@@ -245,8 +269,9 @@ mod dos {
         pub dx_selector: u16,
     }
 
+    #[inline]
     pub unsafe fn int_31h_ax_0100h_rm_alloc(mut bx_paragraphs: u16) -> Result<RmAlloc, AllocErr> {
-        let mut flags: u8;
+        let mut flags: u16;
         let mut ax: u16;
         let mut dx_selector: u16;
         asm!(
@@ -256,11 +281,10 @@ mod dos {
             ax = lateout(reg) ax,
             in("ax") 0x0100u16,
             inlateout("bx") bx_paragraphs => bx_paragraphs,
-            lateout("ah") flags,
-            lateout("al") _,
+            lateout("ax") flags,
             lateout("dx") dx_selector,
         );
-        if flags & CF == 0 {
+        if ((flags >> 8) as u8) & CF == 0 {
             Ok(RmAlloc { ax_segment: ax, dx_selector })
         } else {
             Err(AllocErr { ax_err: ax, bx_available_paragraphs: bx_paragraphs })
@@ -351,15 +375,19 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
         unsafe { int_21h_ah_09h_out_str(b"Insuficient memory.\r\n$".as_ptr()); }
         exit(1);
     }
-    let conventional_memory = (unsafe { int_31h_ax_0100h_rm_alloc(conventional_memory_size) }).unwrap_or_else(|_| {
+    let conventional_memory = (unsafe { int_31h_ax_0100h_rm_alloc(CONVENTIONAL_MEMORY_REQUIRED) }).unwrap_or_else(|_| {
         unsafe { int_21h_ah_09h_out_str(b"Cannot allocate memory.\r\n$".as_ptr()); }
         exit(1);
     });
+    let a = unsafe { int_31h_ax_0006h_segment_addr(conventional_memory.dx_selector).unwrap().cx_dx_addr };
+    assert!(a == (conventional_memory.ax_segment as u32) << 4);
+
     assert!(size_of::<usize>() == size_of::<u32>());
     let conventional_memory = unsafe { slice::from_raw_parts_mut(
         ((conventional_memory.ax_segment as u32) << 4) as *mut u8,
-        ((conventional_memory_size as u32) << 4) as usize
+        ((CONVENTIONAL_MEMORY_REQUIRED as u32) << 4) as usize
     ) };
+    let (code_page_memory, conventional_memory) = conventional_memory.split_at_mut(512);
     let code_page_n = (unsafe { int_21h_ax_6601h_code_page() }).unwrap_or_else(|_| {
         unsafe { int_21h_ah_09h_out_str(b"Cannot determine code page.\r\n$".as_ptr()); }
         exit(1);
@@ -371,9 +399,40 @@ pub extern "stdcall" fn mainCRTStartup() -> ! {
     code_page[11].write(b'0' + (code_page_n % 10) as u8);
     code_page[12].write(0);
     let code_page: [u8; 13] = unsafe { transmute(code_page) };
-    let _code_page = (unsafe { int_21h_ah_3D_open(code_page.as_ptr(), 0x00) }).unwrap_or_else(|_| {
+    let code_page = (unsafe { int_21h_ah_3Dh_open(code_page.as_ptr(), 0x00) }).unwrap_or_else(|_| {
         unsafe { int_21h_ah_09h_out_str(b"Cannot open code page file.\r\n$".as_ptr()); }
         exit(1);
-    });
+    }).ax_handle;
+    let mut code_page_buf: &mut [MaybeUninit<u8>] = unsafe { transmute(&mut code_page_memory[..]) };
+    unsafe { int_21h_ah_09h_out_str(b"OK\r\n$".as_ptr()); }
+    loop {
+        if code_page_buf.is_empty() {
+            unsafe { int_21h_ah_09h_out_str(b"empty\r\n$".as_ptr()); }
+            let mut byte: MaybeUninit<u8> = MaybeUninit::uninit();
+            let read = (unsafe { int_21h_ah_3Fh_read(code_page, slice::from_mut(&mut byte)) }).unwrap_or_else(|_| {
+                unsafe { int_21h_ah_09h_out_str(b"Cannot read code page file.\r\n$".as_ptr()); }
+                exit(1);
+            }).ax_read;
+            if read != 0 {
+                unsafe { int_21h_ah_09h_out_str(b"Invalid code page file: too big.\r\n$".as_ptr()); }
+                exit(1);
+            }
+            break;
+        }
+        unsafe { int_21h_ah_09h_out_str(b"go\r\n$".as_ptr()); }
+        let read = (unsafe { int_21h_ah_3Fh_read(code_page, code_page_buf) }).unwrap_or_else(|_| {
+            unsafe { int_21h_ah_09h_out_str(b"Cannot read code page file.\r\n$".as_ptr()); }
+            exit(1);
+        }).ax_read;
+        unsafe { int_21h_ah_09h_out_str(b"read\r\n$".as_ptr()); }
+        if read == 0 { break; }
+        code_page_buf = &mut code_page_buf[read as usize ..];
+    }
+    unsafe { int_21h_ah_09h_out_str(b"OK\r\n$".as_ptr()); }
+    if !code_page_buf.is_empty() {
+        unsafe { int_21h_ah_09h_out_str(b"Invalid code page file: too small.\r\n$".as_ptr()); }
+        exit(1);
+    }
+    let code_page: &CodePage = unsafe { &*(code_page_memory.as_ptr() as *const CodePage) };
     exit(0);
 }
