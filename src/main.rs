@@ -503,8 +503,15 @@ extern "stdcall" fn mainCRTStartup(_: *const PEB) -> u64 {
     let code_page: &CodePage = unsafe { &*(code_page_memory.as_ptr() as *const CodePage) };
     let mut w = DosWriter(code_page);
     let _ = writeln!(w, "Hello, DOS World!");
-    //unsafe { int_10h_ah_00h_video_mode(0x12); } // 80x30, 8x16, 16
+    unsafe { int_10h_ah_00h_video_mode(0x03); }
+    let video_ptr = (0xB800usize << 4) as *mut u8;
+    let video_size = 80 * 25 * 2;
+    let video = unsafe { slice::from_raw_parts_mut(video_ptr, video_size) };
+    video[0] = b'O';
+    video[2] = b'K';
+    video[1] = 0x40;
+    video[3] = 0x40;
     //unsafe { int_21h_ah_09h_out_str(b"OK.\r\n$".as_ptr()); }
-    //loop { }
-    exit(0);
+    loop { }
+    //exit(0);
 }
