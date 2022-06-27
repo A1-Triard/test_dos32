@@ -1,3 +1,4 @@
+#![feature(extern_types)]
 #![feature(lang_items)]
 #![feature(panic_info_message)]
 
@@ -18,13 +19,13 @@
 extern crate rlibc;
 
 #[no_mangle]
-pub extern "C" fn _aulldiv() -> ! { exit(10) }
+extern "C" fn _aulldiv() -> ! { exit(10) }
 #[no_mangle]
-pub extern "C" fn _aullrem() -> ! { exit(11) }
+extern "C" fn _aullrem() -> ! { exit(11) }
 #[no_mangle]
-pub extern "C" fn strlen() -> ! { exit(12) }
+extern "C" fn strlen() -> ! { exit(12) }
 #[no_mangle]
-pub extern "C" fn _fltused() -> ! { exit(13) }
+extern "C" fn _fltused() -> ! { exit(13) }
 
 //use arrayvec::ArrayVec;
 use core::arch::asm;
@@ -371,7 +372,7 @@ impl Write for DosLastChanceWriter {
 }
 
 #[panic_handler]
-pub extern fn panic(info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     let _ = DosLastChanceWriter.write_str("panic");
     if let Some(&message) = info.message() {
         let _ = DosLastChanceWriter.write_str(": ");
@@ -418,9 +419,13 @@ impl Write for DosWriter {
     }
 }
 
+extern {
+    type PEB;
+}
+
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern "stdcall" fn mainCRTStartup() -> ! {
+extern "stdcall" fn mainCRTStartup(_: *const PEB) -> u64 {
     let dos_ver = int_21h_ah_30h_dos_ver();
     if dos_ver.al_major < 3 || dos_ver.al_major == 3 && dos_ver.ah_minor < 30 {
         unsafe { int_21h_ah_09h_out_str(b"Error: DOS >= 3.3 required.\r\n$".as_ptr()); }
